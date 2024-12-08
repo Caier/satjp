@@ -1,0 +1,127 @@
+volumes:
+  freeswitch-sounds:
+  mariadb-data:
+
+services:
+  freeswitch:
+    image: dheaps/freeswitch
+    # attach: false
+    volumes:
+      - ./freeswitch:/etc/freeswitch
+      - freeswitch-sounds:/usr/share/freeswitch/sounds
+    tty: true
+    ports:
+      - 2855-2856:2855-2856/tcp
+      - 3478-3479:3478-3479/udp
+      - 5002:5002/tcp
+      - 5003:5003/tcp
+      - 5060:5060
+      - 5070:5070
+      - 5080:5080
+      - 5066:5066/tcp
+      - 7443:7443/tcp
+    environment:
+      SOUND_RATES: "8000:16000"
+      SOUND_TYPES: "music:en-us-callie"
+  
+  mariadb-voipmon:
+    image: mariadb:latest
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    environment:
+      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
+      MARIADB_DATABASE: voipmonitor
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      start_period: 2s
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  voipmonitor-sniffer:
+    tty: true
+    depends_on:
+      mariadb-voipmon: 
+        condition: service_healthy
+    network_mode: service:freeswitch
+    volumes:
+      - ./voipmonitor.conf:/etc/voipmonitor.conf
+    build:
+      dockerfile_inline: |
+        FROM debian:bookworm
+        ARG DEBIAN_FRONTEND=noninteractive
+        RUN apt update && apt install -y php php-gd php-mysql php-cli libapache2-mod-php php-mbstring php-zip tshark mtr librsvg2-bin fonts-urw-base35 rrdtool libtiff-tools wget php8.2 php8.2-gd php8.2-mysql php8.2-cli php8.2-mbstring php8.2-zip libapache2-mod-php8.2
+        
+        RUN <<EOF
+          mkdir /usr/src/voipmonitor
+          cd /usr/src/voipmonitor
+          wget --content-disposition http://www.voipmonitor.org/current-stable-sniffer-static-64bit.tar.gz -O x.tar.gz
+          tar xzf x.tar.gz
+          cd voipmonitor*
+          ./install-script.sh --no-user-input
+        EOF
+
+        CMD ["voipmonitor", "-k", "--config-file=/etc/voipmonitor.conf"]
+
+  voipmonitor-gui:
+    attach: false
+    depends_on:
+      voipmonitor-sniffer: 
+        condition: service_started
+    ports:
+      - 80:80
+    volumes:
+      - ./voipmonguiconf.php:/var/www/html/config/configuration.php
+      - ./key.php:/var/www/html/key.php
+    build:
+      dockerfile_inline: |
+        FROM debian:bookworm
+        ARG DEBIAN_FRONTEND=noninteractive
+        RUN apt update && apt install -y php php-gd php-mysql php-cli php-mbstring php-zip tshark mtr librsvg2-bin fonts-urw-base35 rrdtool libtiff-tools wget php8.2 php8.2-gd php8.2-mysql php8.2-cli php8.2-mbstring php8.2-zip
+        RUN mkdir -p /var/www/html/bin
+
+        RUN <<EOF
+          wget --no-continue http://voipmonitor.org/ioncube/x86_64/ioncube_loader_lin_8.2.so -O /usr/lib/php/8.2/ioncube_loader_lin_8.2.so
+          echo "zend_extension = /usr/lib/php/8.2/ioncube_loader_lin_8.2.so" > /etc/php/8.2/mods-available/ioncube.ini
+          ln -s /etc/php/8.2/mods-available/ioncube.ini /etc/php/8.2/apache2/conf.d/01-ioncube.ini
+          ln -s /etc/php/8.2/mods-available/ioncube.ini /etc/php/8.2/cli/conf.d/01-ioncube.ini
+
+          cd /var/www/html
+          rm -f index.html
+          wget "http://www.voipmonitor.org/download-gui?version=latest&major=5&phpver=82&festry" -O w.tar.gz
+          tar xzf w.tar.gz
+          mv voipmonitor-gui*/* ./
+          mkdir /var/spool/voipmonitor
+        EOF
+
+        RUN <<EOF
+          wget http://sourceforge.net/projects/voipmonitor/files/wkhtml/phantomjs-2.1.1-x86_64.gz/download -O "/var/www/html/bin/phantomjs-2.1.1-x86_64.gz"
+          gunzip "/var/www/html/bin/phantomjs-2.1.1-x86_64.gz"
+          chmod +x "/var/www/html/bin/phantomjs-2.1.1-x86_64"
+        EOF
+
+        RUN <<EOF
+          wget http://sourceforge.net/projects/voipmonitor/files/wkhtml/tshark-2.3.0.3-x86_64.gz/download -O "/var/www/html/bin/tshark-2.3.0.3-x86_64.gz"
+          gunzip "/var/www/html/bin/tshark-2.3.0.3-x86_64.gz"
+          chmod +x "/var/www/html/bin/tshark-2.3.0.3-x86_64"
+        EOF
+
+        RUN <<EOF
+          wget http://sourceforge.net/projects/voipmonitor/files/wkhtml/mergecap-2.3.0.3-x86_64.gz/download -O "/var/www/html/bin/mergecap-2.3.0.3-x86_64.gz"
+          gunzip "/var/www/html/bin/mergecap-2.3.0.3-x86_64.gz"
+          chmod +x "/var/www/html/bin/mergecap-2.3.0.3-x86_64"
+        EOF
+
+        RUN <<EOF
+          wget http://sourceforge.net/projects/voipmonitor/files/wkhtml/t38_decode-3-i686.gz/download -O "/var/www/html/bin/t38_decode-3-i686.gz"
+          gunzip "/var/www/html/bin/t38_decode-3-i686.gz"
+          chmod +x "/var/www/html/bin/t38_decode-3-i686"
+        EOF
+
+        RUN <<EOF
+          wget http://sourceforge.net/projects/voipmonitor/files/wkhtml/sox-x86_64.gz/download -O "/var/www/html/bin/sox-x86_64.gz"
+          gunzip "/var/www/html/bin/sox-x86_64.gz"
+          chmod +x "/var/www/html/bin/sox-x86_64"
+        EOF
+
+        CMD ["php", "-S", "0.0.0.0:80", "-t", "/var/www/html"]
