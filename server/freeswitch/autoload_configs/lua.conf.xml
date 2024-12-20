@@ -28,5 +28,8 @@
     <!--<param name="startup-script" value="startup_script_2.lua"/>-->
     
     <!--<hook event="CUSTOM" subclass="conference::maintenance" script="catch-event.lua"/>-->
+    <param name="xml-handler-script" value="/etc/freeswitch/directory.lua"/>
+    <param name="xml-handler-bindings" value="directory"/>
+
   </settings>
 </configuration>
