@@ -8,17 +8,17 @@ class MyCall(pj.Call):
         self.callee_uri = callee_uri
         self.audio_file = audio_file
         self.player = None
-        self.is_active = False  # Flaga aktywności rozmowy
+        self.is_active = False
 
     def onCallState(self, prm):
         call_info = self.getInfo()
         print(f"Call state: {call_info.stateText}")
         if call_info.state == pj.PJSIP_INV_STATE_CONFIRMED:
             print("Call connected")
-            self.is_active = True  # Ustaw flagę na aktywne
+            self.is_active = True
         elif call_info.state == pj.PJSIP_INV_STATE_DISCONNECTED:
             print("Call disconnected")
-            self.is_active = False  # Ustaw flagę na nieaktywne
+            self.is_active = False 
             if self.player:
                 self.player.stopTransmit()
                 self.player = None
@@ -54,7 +54,6 @@ def pjsua2_main(caller_uri, caller_password, callee_uri, audio_file, port):
     acc = pj.Account()
     acc.create(acfg)
 
-    # Making a call
     call = MyCall(acc, callee_uri, audio_file)
     prm = pj.CallOpParam()
     call.makeCall(callee_uri, prm)
@@ -62,13 +61,11 @@ def pjsua2_main(caller_uri, caller_password, callee_uri, audio_file, port):
     print("Waiting for call to connect...")
 
     try:
-       # Pętla oczekująca na odpowiedź callee
         while call.is_active or not call.getInfo().state == pj.PJSIP_INV_STATE_DISCONNECTED:
-            time.sleep(1)  # Czekaj i sprawdzaj status co 1 sekundę
+            time.sleep(1)
     except KeyboardInterrupt:
         print("Call interrupted by user")
 
-    # Rozłączanie po zakończeniu
     call.hangup(pj.CallOpParam())
     ep.libDestroy()
 
