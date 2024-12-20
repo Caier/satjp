@@ -46,7 +46,7 @@ def pjsua2_main(caller_uri, caller_password, callee_uri, audio_file, port):
     
     acfg = pj.AccountConfig()
     acfg.idUri = caller_uri
-    acfg.regConfig.registrarUri = "sip:127.0.01"
+    acfg.regConfig.registrarUri = "sip:127.0.0.1"
     auth_username = caller_uri.split(":")[1].split("@")[0]
     cred = pj.AuthCredInfo("digest", "*", auth_username, 0, caller_password)
     acfg.sipConfig.authCreds.append(cred)
